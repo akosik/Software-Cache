@@ -14,7 +14,7 @@ TOBJECTS = $(TSOURCES:.c=.o)
 
 OBJECTS=$(SOURCES:.c=.o)
 
-DEBUGOBJ = $(SOURCES:.c=.d)
+DEBUGOBJ = $(SOURCES:.c=.o)
 
 VERBOSEOBJ = $(SOURCES:.c=.v)
 

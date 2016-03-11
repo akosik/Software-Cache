@@ -2,22 +2,26 @@
 
 #include "lru.h"
 
-void lru_add(evict_class *e, pair *kv, uint64_t htable_index)
+// adjusts pointers to add a reference to a key-value pair into the LRU queue
+void lru_add(evict_class *e, node kvnode, uint64_t htable_index)
 {
   if(e->mrupair != NULL)
     {
-      kv->lru->next = e->mrupair;
-      e->mrupair->prev = kv->lru;
+      kvnode->next = e->mrupair;
+      e->mrupair->prev = kvnode;
     }
   else
     {
-      kv->lru->next = NULL;
-      e->lrupair = kv->lru;
+      kvnode->next = NULL;
+      e->lrupair = kvnode;
     }
-  e->mrupair = kv->lru;
-  kv->lru->tabindex = htable_index;
+  e->mrupair = kvnode;
+  kvnode->tabindex = htable_index;
 }
 
+// Removes node from LRU queue and fixes dangling pointers
+// returns the index of the node in the hashtable for deletion by
+// the main code
 uint64_t lru_remove(evict_class *e)
 {
   if(e->lrupair == NULL)
@@ -32,7 +36,7 @@ uint64_t lru_remove(evict_class *e)
   if(e->lrupair->prev != NULL)
     {
       e->lrupair->prev->next = NULL;
-      pair *newlru = e->lrupair->prev;
+      node newlru = e->lrupair->prev;
       e->lrupair->prev = NULL;
       e->lrupair = newlru;
     }

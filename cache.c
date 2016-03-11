@@ -11,7 +11,7 @@ uint64_t defaultHash(key_t str)
   uint64_t hash = 5381;
   uint8_t c;
 
-  while (c = *str++)
+  while ((c = *str++))
     hash = ((hash << 5) + hash) + c;
 
   return hash;
@@ -36,6 +36,7 @@ void *changeval(void *cacheval, const void *newval, size_t val_size)
 // all data into the new cache
 void cache_resize(cache_t cache)
 {
+  //Reallocate
   pair *temp = NULL;
   temp = realloc(cache->dict, cache->capacity * 2 * sizeof(pair));
   if(temp != NULL) cache->dict = temp;
@@ -43,15 +44,15 @@ void cache_resize(cache_t cache)
     {
       printf("Unable to resize cache. Your cache is doomed.\n");
       exit(1);
-      }
-  memset(&cache->dict[cache->capacity + 1], NULL, (cache->capacity-1) * sizeof(pair));
+    }
 
+  //Allocate space for eviction structs
   uint64_t i = cache->capacity;
   for( ; i < cache->capacity * 2; ++i)
     {
       cache->dict[i].key = NULL;
       cache->dict[i].val = NULL;
-      cache->dict[i].lru = calloc(1,sizeof(node));
+      cache->dict[i].evict = calloc(1,sizeof(struct node_t));
     }
 
   cache->capacity *= 2;
@@ -61,25 +62,32 @@ void cache_resize(cache_t cache)
 // Pass NULL for last 3 functions for defaults
 cache_t create_cache(uint64_t maxmem, hash_func hash, add_func add, remove_func remove)
 {
+  //Allocate cache
   cache_t cache = calloc(1,sizeof(struct cache_obj));
   if (cache == NULL) exit(1);
 
-  cache->dict = calloc(maxmem,sizeof(pair));
+  //Allocate list of key-value pairs
+  cache->dict = calloc(maxmem/4,sizeof(pair));
   if (cache->dict == NULL) exit(1);
 
+  //Allocate eviction structs
   uint64_t i = 0;
-  for( ; i < maxmem; ++i)
+  for( ; i < maxmem/4; ++i)
     {
       cache->dict[i].key = NULL;
       cache->dict[i].val = NULL;
-      cache->dict[i].lru = calloc(1,sizeof(struct node_t));
+      cache->dict[i].evict = calloc(1,sizeof(struct node_t));
     }
 
+  //Allocate eviction metadata
   cache->evict = calloc(1,sizeof(evict_class));
   if (cache->evict == NULL) exit(1);
 
-  cache->capacity = maxmem;
+  //Set metadata, length and memsize will be 0 from calloc
+  cache->capacity = maxmem/4;
+  cache->maxmem = maxmem;
 
+  //Set function pointers
   if(hash == NULL) cache->hash = defaultHash;
   else cache->hash = hash;
 
@@ -99,8 +107,16 @@ cache_t create_cache(uint64_t maxmem, hash_func hash, add_func add, remove_func 
 void cache_set(cache_t cache, key_t key, val_t val, uint32_t val_size)
 {
   pair *current;
+
+  // if the value is too big, don't even bother, tell the user to get more RAM
+  if(val_size > cache->maxmem)
+    {
+      printf("That value is too big. It was not stored.\n");
+      return;
+    }
+
   // Remove values until the cache has enough room for the new value
-  while(cache->memsize + val_size > cache->capacity)
+  while(cache->memsize + val_size > cache->maxmem)
     {
       uint64_t index = cache->evict->remove(cache->evict);
       current = &cache->dict[index];
@@ -112,9 +128,9 @@ void cache_set(cache_t cache, key_t key, val_t val, uint32_t val_size)
       --cache->length;
     }
 
-  uint64_t hashval = cache->hash(key) % cache->capacity;
   // hash the key and perform linear probing until an open spot is found.
   // Since the cache resizes, the cache should never be full.
+  uint64_t hashval = cache->hash(key) % cache->capacity;
   for(current = &cache->dict[hashval]; current->key != NULL; current = &cache->dict[++hashval % cache->capacity])
     {
       //if the keys match, replace that pair
@@ -124,7 +140,7 @@ void cache_set(cache_t cache, key_t key, val_t val, uint32_t val_size)
           cache->memsize -= current->size;
           cache->memsize += val_size;
           current->size = val_size;
-          cache->evict->add(cache->evict,current,hashval);
+          cache->evict->add(cache->evict,current->evict,hashval);
           return;
         }
     }
@@ -135,13 +151,13 @@ void cache_set(cache_t cache, key_t key, val_t val, uint32_t val_size)
   ++cache->length;
   current->size = val_size;
   cache->memsize += val_size;
-  cache->evict->add(cache->evict,current,hashval);
+  cache->evict->add(cache->evict,current->evict,hashval);
   //resize if over half full
   if((cache->length / (float)cache->capacity) > .5) cache_resize(cache);
 }
 
 // Retrieve the value associated with key in the cache, or NULL if not found
-val_t cache_get(cache_t cache, key_t key)
+val_t cache_get(cache_t cache, key_t key, uint32_t *val_size)
 {
   //hash and check for a key match, else return NULL
   uint64_t n = 0;
@@ -154,7 +170,8 @@ val_t cache_get(cache_t cache, key_t key)
         {
           if(!strcmp(current->key,key))
             {
-              cache->evict->add(cache->evict,current,hashval);
+              cache->evict->add(cache->evict,current->evict,hashval);
+              *val_size = current->size;
               return current->val;
             }
         }
@@ -196,18 +213,23 @@ uint64_t cache_space_used(cache_t cache)
   return cache->memsize;
 }
 
-// Destroy all resource connected to a cache object
+// Destroy all resources connected to a cache object
+// Destroy is not constant time but presumably you don't need speed here since
+// you're tearing down your cache.
+// you could just leave this function blank and let the OS free everything,
+// then it would LOOK constant, but then hopefully you don't plan on keeping
+// the program running.
 void destroy_cache(cache_t cache)
 {
   uint64_t i = 0;
   for( ; i < cache->capacity; ++i)
     {
-    if(cache->dict[i].key != NULL)
-      {
-        free(cache->dict[i].key);
-        free(cache->dict[i].val);
-      }
-    free(cache->dict[i].lru);
+      if(cache->dict[i].key != NULL)
+        {
+          free(cache->dict[i].key);
+          free(cache->dict[i].val);
+        }
+      free(cache->dict[i].evict);
     }
 
   free(cache->dict);

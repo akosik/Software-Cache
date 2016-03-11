@@ -55,9 +55,14 @@ cache_t create_cache(uint64_t maxmem, hash_func hash, add_func add, remove_func 
   cache->dict = calloc(maxmem,sizeof(pair));
   if (cache->dict == NULL) exit(1);
   uint64_t i = 0;
-  for( ; i < maxmem; ++i) pthread_mutex_init(cache->dict[i].mutex);
+  for( ; i < maxmem; ++i) if(pthread_mutex_init(&cache->dict[i].mutex,NULL) != 0) printf("init failed\n");
   cache->evict = calloc(1,sizeof(evict_class));
   if (cache->evict == NULL) exit(1);
+
+  cache->cap = calloc(1,sizeof(struct capex));
+  cache->len = calloc(1,sizeof(struct lentex));
+  cache->mem = calloc(1,sizeof(struct memtex));
+
   cache->cap->capacity = maxmem;
   cache->len->length = 0;
   cache->mem->memsize = 0;
@@ -89,53 +94,57 @@ void cache_set(void *arg)
 
   pair *current;
   // Remove values until the cache has enough room for the new value
-  pthread_mutex_lock(cache->mem->mutex);
+  pthread_mutex_lock(&cache->mem->mutex);
   while(cache->mem->memsize + val_size > cache->cap->capacity)
     {
       size_t size = cache->evict->remove(cache->evict);
       cache->mem->memsize -= size;
       --cache->len->length;
     }
-  pthread_mutex_unlock(cache->mem->mutex);
+  pthread_mutex_unlock(&cache->mem->mutex);
 
+  pthread_mutex_lock(&cache->cap->mutex);
   uint64_t hashval = cache->hash(key) % cache->cap->capacity;
+  pthread_mutex_unlock(&cache->cap->mutex);
   // hash the key and perform linear probing until an open spot is found.
   // Since the cache resizes, the cache should never be full.
-  for(current = &cache->dict[hashval]; current->key != NULL; current = &cache->dict[++hashval % cache->cap->capacity])
+  for(; current->key != NULL; current = &cache->dict[++hashval % cache->cap->capacity])
     {
-      pthread_mutex_lock(current->mutex);
+      pthread_mutex_lock(&current->mutex);
+      current = &cache->dict[hashval];
       //if the keys match, replace that pair
       if(!strcmp(current->key,key))
         {
           current->val = changeval(current->val,val,val_size);
-          pthread_mutex_lock(cache->mem->mutex);
+          pthread_mutex_lock(&cache->mem->mutex);
           cache->mem->memsize -= current->size;
           cache->mem->memsize += val_size;
-          pthread_mutex_unlock(cache->mem->mutex);
+          pthread_mutex_unlock(&cache->mem->mutex);
           current->size = val_size;
           cache->evict->add(cache->evict,current);
           return;
         }
-      pthread_mutex_unlock(current->mutex);
-    }
+      pthread_mutex_unlock(&current->mutex);
+      }
   //if you found an open spot, save the pair there
-  pthread_mutex_lock(current->mutex);
-  current->key = malloc(sizeof(uint8_t) * strlen(key));
-  strcpy(current->key,key);
-  current->val = changeval(current->val,val,val_size);
+  pthread_mutex_lock(&cache->dict[hashval].mutex);
+  //printf("hi: %s\n",cache->dict[hashval].key);
+  cache->dict[hashval].key = malloc(sizeof(uint8_t) * strlen(key));
+  strcpy(cache->dict[hashval].key,key);
+  cache->dict[hashval].val = changeval(cache->dict[hashval].val,val,val_size);
 
-  pthread_mutex_lock(cache->len->mutex);
+  pthread_mutex_lock(&cache->len->mutex);
   ++cache->len->length;
-  pthread_mutex_unlock(cache->len->mutex);
+  pthread_mutex_unlock(&cache->len->mutex);
 
   current->size = val_size;
 
-  pthread_mutex_lock(cache->mem->mutex);
+  pthread_mutex_lock(&cache->mem->mutex);
   cache->mem->memsize += val_size;
-  pthread_mutex_unlock(cache->mem->mutex);
+  pthread_mutex_unlock(&cache->mem->mutex);
 
   cache->evict->add(cache->evict,current);
-  pthread_mutex_unlock(current->mutex);
+  pthread_mutex_unlock(&cache->dict[hashval].mutex);
 
   /*
 //resize if over half full
@@ -158,7 +167,7 @@ val_t cache_get(void *arg)
   for(; n < cache->cap->capacity; hashval = ++hashval % cache->cap->capacity)
     {
       current = &cache->dict[hashval];
-      pthread_mutex_lock(current->mutex);
+      pthread_mutex_lock(&current->mutex);
       if(current->key != NULL)
         {
           if(!strcmp(current->key,key))
@@ -167,7 +176,7 @@ val_t cache_get(void *arg)
               return current->val;
             }
         }
-      pthread_mutex_unlock(current->mutex);
+      pthread_mutex_unlock(&current->mutex);
       ++n;
     }
   return NULL;
@@ -187,7 +196,7 @@ void cache_delete(void *arg)
   for(; n < cache->cap->capacity; hashval = ++hashval % cache->cap->capacity)
     {
       current = &cache->dict[hashval];
-      pthread_mutex_lock(current->mutex);
+      pthread_mutex_lock(&current->mutex);
       if(current->key != NULL)
         {
           if(!strcmp(current->key,key))
@@ -198,28 +207,28 @@ void cache_delete(void *arg)
               current->val = NULL;
               if(current->prev != NULL)
                 {
-                  pthread_mutex_lock(current->prev->mutex);
+                  pthread_mutex_lock(&current->prev->mutex);
                   current->prev->next = current->next;
-                  pthread_mutex_unlock(current->prev->mutex);
+                  pthread_mutex_unlock(&current->prev->mutex);
                 }
               if(current->next != NULL)
                 {
-                  pthread_mutex_lock(current->prev->mutex);
+                  pthread_mutex_lock(&current->prev->mutex);
                   current->next->prev = current->prev;
-                  pthread_mutex_unlock(current->prev->mutex);
+                  pthread_mutex_unlock(&current->prev->mutex);
                 }
-              pthread_mutex_lock(cache->len->mutex);
+              pthread_mutex_lock(&cache->len->mutex);
               --cache->len->length;
-              pthread_mutex_unlock(cache->len->mutex);
+              pthread_mutex_unlock(&cache->len->mutex);
 
-              pthread_mutex_lock(cache->mem->mutex);
+              pthread_mutex_lock(&cache->mem->mutex);
               cache->mem->memsize -= current->size;
-              pthread_mutex_unlock(cache->mem->mutex);
+              pthread_mutex_unlock(&cache->mem->mutex);
 
               return;
             }
         }
-      pthread_mutex_unlock(current->mutex);
+      pthread_mutex_unlock(&current->mutex);
       ++n;
     }
 }

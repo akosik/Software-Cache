@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lru_threaded.h"
+#include <pthread.h>
 
 /*
 The user must define an evicition struct that holds an add and delete function
@@ -25,7 +26,7 @@ typedef uint64_t (*hash_func)(keyy_t key);
 struct memtex
 {
   size_t memsize;
-  pthread_mutex_t *mutex;
+  pthread_mutex_t mutex;
 };
 
 struct lentex
@@ -66,7 +67,7 @@ typedef struct threadi
 
 typedef struct cache_query
 {
-  pthread_t *thread;
+  pthread_t thread;
   tinfo *tinfo;
 } cachequery;
 

@@ -11,10 +11,6 @@ the cache create function.  If the user does not wish to implment an eviction
 policy then they should include the lru header and link with lru.c.
 */
 
-//Key and Value Type
-typedef const uint8_t *key_t;
-typedef const void *val_t;
-
 //Forward Declaration of cache object
 struct cache_obj;
 typedef struct cache_obj *cache_t;
@@ -22,22 +18,33 @@ typedef struct cache_obj *cache_t;
 // For a given key string, return a pseudo-random integer:
 typedef uint64_t (*hash_func)(key_t key);
 
+typedef struct pair_t
+{
+  key_t key;
+  val_t val;
+  size_t size;
+  node evict;
+} pair;
+
 struct cache_obj
 {
   //The list of key-value pairs
   pair *dict;
-  //The total possible size of the dict, following c++ naming conventions
+  //The total number of bins in the dict, following c++ naming conventions
   size_t capacity;
   //Number of keys in the cache
   size_t length;
   //Size taken up by values
   size_t memsize;
+  //Maximum Memory
+  size_t maxmem;
   //hash function
   hash_func hash;
   //eviction struct
   evict_class *evict;
 };
 
+// A wrapper around memcpy with some basic error checking
 void *changeval(void *cacheval, const void *newval, size_t val_size);
 
 // Create a new cache object with a given maximum memory capacity.
@@ -50,7 +57,7 @@ cache_t create_cache(uint64_t maxmem, hash_func hash, add_func add, remove_func 
 void cache_set(cache_t cache, key_t key, val_t val, uint32_t val_size);
 
 // Retrieve the value associated with key in the cache, or NULL if not found
-val_t cache_get(cache_t cache, key_t key);
+val_t cache_get(cache_t cache, key_t key, uint32_t *val_size);
 
 // Delete an object from the cache, if it's still there
 void cache_delete(cache_t cache, key_t key);

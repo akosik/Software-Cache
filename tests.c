@@ -57,8 +57,7 @@ int checkSet(cache_t cache)
 
 int checkGetExistent(cache_t cache)
 {
-  uint64_t i;
-    key_t
+  key_t
     key0 = "hello",
     key1 = "thenumber3",
     key2 = "goodbye",
@@ -69,15 +68,35 @@ int checkGetExistent(cache_t cache)
   uint32_t value2 = 304;
   uint64_t value3 = 123123124;
 
-  uint8_t testval1 = *(uint8_t*)cache_get(cache,key0);
-  uint8_t testval2 = *(uint8_t*)cache_get(cache,key1);
-  uint32_t testval3 = *(uint32_t*)cache_get(cache,key2);
-  uint64_t testval4 = *(uint64_t*)cache_get(cache,key3);
+  uint32_t
+    *size0 = calloc(1,sizeof(uint32_t)),
+    *size1 = calloc(1,sizeof(uint32_t)),
+    *size2 = calloc(1,sizeof(uint32_t)),
+    *size3 = calloc(1,sizeof(uint32_t));
 
-  if(testval1 != NULL) assert(testval1 == value0);
-  if(testval2 != NULL) assert(testval2 == value1);
-  if(testval3 != NULL) assert(testval3 == value2);
-  if(testval4 != NULL) assert(testval4 == value3);
+  uint8_t* testval1 = (uint8_t*)cache_get(cache,key0,size0);
+  uint8_t* testval2 = (uint8_t*)cache_get(cache,key1,size1);
+  uint32_t* testval3 = (uint32_t*)cache_get(cache,key2,size2);
+  uint64_t* testval4 = (uint64_t*)cache_get(cache,key3,size3);
+
+  if(testval1 != NULL) assert(*testval1 == value0);
+  else exit(1);
+  if(testval2 != NULL) assert(*testval2 == value1);
+  else exit(1);
+  if(testval3 != NULL) assert(*testval3 == value2);
+  else exit(1);
+  if(testval4 != NULL) assert(*testval4 == value3);
+  else exit(1);
+
+  assert(*size0 == sizeof(uint8_t));
+  assert(*size1 == sizeof(uint8_t));
+  assert(*size2 == sizeof(uint32_t));
+  assert(*size3 == sizeof(uint64_t));
+
+  free(size0);
+  free(size1);
+  free(size2);
+  free(size3);
 
   printf("Test 2: Success!\n");
   return 1;
@@ -87,9 +106,12 @@ int checkGetModified(cache_t cache)
 {
   key_t key = "hello";
   uint8_t val = 201;
+  uint32_t *size = calloc(1,sizeof(uint32_t));
   cache_set(cache,key,&val,sizeof(uint8_t));
-  uint8_t testval = *(uint8_t*)cache_get(cache,key);
+  uint8_t testval = *(uint8_t*)cache_get(cache,key,size);
   assert(testval == 201);
+  assert(*size == sizeof(uint8_t));
+  free(size);
   printf("Test 3: Success!\n");
   return 1;
 }
@@ -97,7 +119,10 @@ int checkGetModified(cache_t cache)
 int checkGetNonexistent(cache_t cache)
 {
   key_t key = "sartre";
-  assert(cache_get(cache,key) == NULL);
+  uint32_t *size = calloc(1,sizeof(uint32_t));
+  assert(cache_get(cache,key,size) == NULL);
+  assert(*size == 0);
+  free(size);
   printf("Test 4: Success!\n");
   return 1;
 }
@@ -106,7 +131,10 @@ int checkDelete(cache_t cache)
 {
   key_t key = "goodbye";
   cache_delete(cache,key);
-  assert(cache_get(cache,key) == NULL);
+  uint32_t *size = calloc(1,sizeof(uint32_t));
+  assert(cache_get(cache,key,size) == NULL);
+  assert(*size == 0);
+  free(size);
   printf("Test 5: Success!\n");
   return 1;
 }
@@ -141,26 +169,46 @@ int checkResize(cache_t cache)
   uint64_t value2 = 0;
   uint64_t value3 = 28;
 
+  uint32_t
+    *size0 = calloc(1,sizeof(uint32_t)),
+    *size1 = calloc(1,sizeof(uint32_t)),
+    *size2 = calloc(1,sizeof(uint32_t)),
+    *size3 = calloc(1,sizeof(uint32_t));
+
+  cache_set(cache,key0,&value0,sizeof(uint8_t));
+  cache_set(cache,key1,&value1,sizeof(uint8_t));
+  cache_set(cache,key2,&value2,sizeof(uint64_t));
+  cache_set(cache,key3,&value3,sizeof(uint64_t));
+
   if(cache->dict[cache->hash(key0) % cache->capacity].key != NULL)
     {
-      uint8_t testval1 = *(uint8_t*)cache_get(cache,key0);
+      uint8_t testval1 = *(uint8_t*)cache_get(cache,key0,size0);
       assert(testval1 == value0);
+      assert(*size0 == sizeof(uint8_t));
     }
   if(cache->dict[cache->hash(key1) % cache->capacity].key != NULL)
     {
-      uint8_t testval2 = *(uint8_t*)cache_get(cache,key1);
+      uint8_t testval2 = *(uint8_t*)cache_get(cache,key1,size1);
       assert(testval2 == value1);
+      assert(*size1 == sizeof(uint8_t));
     }
   if(cache->dict[cache->hash(key2) % cache->capacity].key != NULL)
     {
-      uint32_t testval3 = *(uint64_t*)cache_get(cache,key2);
+      uint32_t testval3 = *(uint64_t*)cache_get(cache,key2,size2);
       assert(testval3 == value2);
+      assert(*size2 == sizeof(uint64_t));
     }
   if(cache->dict[cache->hash(key3) % cache->capacity].key != NULL)
     {
-    uint64_t testval4 = *(uint64_t*)cache_get(cache,key3);
-    if(testval4 != NULL) assert(testval4 == value3);
+      uint64_t testval4 = *(uint64_t*)cache_get(cache,key3,size3);
+      if(testval4 != NULL) assert(testval4 == value3);
+      assert(*size3 == sizeof(uint64_t));
     }
+
+  free(size0);
+  free(size1);
+  free(size2);
+  free(size3);
 
   printf("Test 7: Success!\n");
   return 1;
@@ -170,18 +218,21 @@ int checkStructSet(cache_t cache)
 {
   key_t keystruct = "struct";
   struct test_struct value4 = { .word = "it's a bag of words!", .num = 42, .stuff = NULL};
+  uint32_t *size = calloc(1,sizeof(uint32_t));
 
     cache_set(cache,keystruct,&value4,sizeof(struct test_struct));
 
-    assert(!strcmp(cache->dict[cache->hash(keystruct)% cache->capacity].key,"struct"));
+    struct test_struct *holder = (struct test_struct*) cache_get(cache,keystruct,size);
 
-    uint8_t *val5 = (uint8_t*)((struct test_struct*) cache->dict[cache->hash(keystruct) % cache->capacity].val) ->word;
-    uint32_t val6 = (uint32_t)((struct test_struct*) cache->dict[cache->hash(keystruct)% cache->capacity].val)  ->num;
-    uint8_t *val7 = (uint8_t*)((struct test_struct*) cache->dict[cache->hash(keystruct) % cache->capacity].val) ->stuff;
+    uint8_t *val5 = holder->word;
+    uint32_t val6 = holder->num;
+    uint8_t *val7 = holder->stuff;
 
     assert(!strcmp(val5,"it's a bag of words!"));
     assert(val6 == 42);
     assert(val7 == NULL);
+    assert(*size == sizeof(struct test_struct));
+    free(size);
     printf("Test 8: Success!\n");
     return 1;
 }
@@ -189,7 +240,6 @@ int checkStructSet(cache_t cache)
 int checkDestroy(cache_t cache)
 {
   destroy_cache(cache);
-  cache = NULL;
   printf("Test 9: Success!\n");
   return 1;
 }

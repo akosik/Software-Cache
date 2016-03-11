@@ -16,7 +16,7 @@ cache_t checkInit()
   printf("Test 0: Success!\n");
   return cache;
 }
-
+/*
 int checkSet(cache_t cache)
 {
   keyy_t
@@ -30,34 +30,44 @@ int checkSet(cache_t cache)
   uint32_t value2 = 304;
   uint64_t value3 = 123123124;
 
-  tinfo info = { .cache = cache, .key = key0, .val = &value0, .val_size = sizeof(uint8_t) };
-  cachequery q = { .tinfo = &info };
-  pthread_create(q.thread,NULL,cache_set,&q);
-  printf("woo\n");
+  uint64_t i = 1;
+  //for( ; i < cache->cap->capacity; ++i) printf("%s\n",cache->dict[i].key);
+
+  tinfo *info = calloc(1,sizeof(struct threadi));
+  info->cache = cache;
+  info->key = malloc(strlen(key0)+1);
+  strcpy(info->key,key0);
+  info->val = &value0;
+  info->val_size = sizeof(uint8_t);
+  cachequery q;
+  q.tinfo = info;
+  if(pthread_create(&q.thread,NULL,cache_set,&q) != 0) printf("Thread Error\n");
   /*cache_set(cache,key1,&value1,sizeof(uint8_t));
   cache_set(cache,key2,&value2,sizeof(uint32_t));
-  cache_set(cache,key3,&value3,sizeof(uint64_t));*/
-
+  cache_set(cache,key3,&value3,sizeof(uint64_t));
+  pthread_join(q.thread,NULL);
+  i = 0;
+  //for( ; i < cache->cap->capacity; ++i) printf("%s\n",cache->dict[i].key);
   assert(!strcmp(cache->dict[cache->hash(key0) % cache->cap->capacity].key,"hello"));
   /*assert(!strcmp(cache->dict[cache->hash(key1) % cache->capacity].key,"thenumber3"));
   assert(!strcmp(cache->dict[cache->hash(key2) % cache->capacity].key,"goodbye"));
-  assert(!strcmp(cache->dict[cache->hash(key3) % cache->capacity].key,"wow"));*/
+  assert(!strcmp(cache->dict[cache->hash(key3) % cache->capacity].key,"wow"));
 
   uint8_t
     val1 = *(uint8_t*)cache->dict[cache->hash(key0)% cache->cap->capacity].val;
     /*val2 = *(uint8_t*)cache->dict[cache->hash(key1)% cache->capacity].val;
   uint32_t val3 = *(uint32_t*)cache->dict[cache->hash(key2)% cache->capacity].val;
-  uint64_t val4 = *(uint64_t*)cache->dict[cache->hash(key3)% cache->capacity].val;*/
+  uint64_t val4 = *(uint64_t*)cache->dict[cache->hash(key3)% cache->capacity].val;
 
   assert(val1 == 1);
   /*assert(val2 == 3);
   assert(val3 == 304);
-  assert(val4 == 123123124);*/
+  assert(val4 == 123123124);
 
   printf("Test 1: Success!\n");
   return 1;
 }
-/*
+
 int checkGetExistent(cache_t cache)
 {
   uint64_t i;
@@ -96,15 +106,23 @@ int checkGetModified(cache_t cache)
   printf("Test 3: Success!\n");
   return 1;
 }
-
+*/
 int checkGetNonexistent(cache_t cache)
 {
-  keyy_t key = "sartre";
+  keyy_t key0 = "sartre";
+  tinfo *info = calloc(1,sizeof(struct threadi));
+  info->cache = cache;
+  info->key = malloc(strlen(key0)+1);
+  strcpy(info->key,key0);
+  cachequery q;
+  q.tinfo = info;
+  if(pthread_create(&q.thread,NULL,cache_get,&q) != 0) printf("Thread Error\n");
+
   assert(cache_get(cache,key) == NULL);
   printf("Test 4: Success!\n");
   return 1;
 }
-
+/*
 int checkDelete(cache_t cache)
 {
   keyy_t key = "goodbye";
@@ -233,10 +251,13 @@ int checkEviciton(cache_t cache)
 int main(int argc, char** argv)
 {
   cache_t cache = checkInit();
+  /*
   checkSet(cache);
-  /*checkGetExistent(cache);
+  checkGetExistent(cache);
   checkGetModified(cache);
+  */
   checkGetNonexistent(cache);
+  /*
   checkDelete(cache);
   checkSize(cache);
   checkResize(cache);
